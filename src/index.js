@@ -93,7 +93,7 @@ I2cPwmInterface.get = function (device, index, options, callback) {
 module.exports = driver({
     attach: function (inputs, context, next) {
         this._i2c = inputs['i2c'];
-        this._interfaces = [];
+        this._interfaceMap = Object.create(null);
 
         var frequency = context.args.frequency;
 
@@ -107,29 +107,30 @@ module.exports = driver({
         this.allOff();
     },
     getInterface: function (name, options, callback) {
+        assertCallback(callback);
+
+        var interfaceMap = this._interfaceMap;
+
+        if (name in interfaceMap) {
+            invokeCallback(callback, undefined, interfaceMap[name]);
+            return;
+        }
+
         if (!hasOwnProperty.call(OUTPUT_INDEX_MAP, name)) {
             throw new Error('Invalid interface name "' + name + '"');
         }
 
-        assertCallback(callback);
-
         var index = OUTPUT_INDEX_MAP[name];
 
-        var interfaces = this._interfaces;
+        I2cPwmInterface.get(this, index, options, function (error, pwmInterface) {
+            if (error) {
+                callback(error);
+                return;
+            }
 
-        if (index in interfaces) {
-            invokeCallback(callback, undefined, interfaces[index]);
-        } else {
-            I2cPwmInterface.get(this, index, options, function (error, pwmInterface) {
-                if (error) {
-                    callback(error);
-                    return;
-                }
-
-                interfaces[index] = pwmInterface;
-                callback(undefined, pwmInterface);
-            });
-        }
+            interfaceMap[name] = pwmInterface;
+            callback(undefined, pwmInterface);
+        });
     },
     exports: {
         /**
