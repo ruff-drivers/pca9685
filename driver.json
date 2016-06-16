@@ -2,8 +2,7 @@
     "models": [],
     "args": {
         "frequency": {
-            "type": "number",
-            "default": 200
+            "type": "number"
         }
     },
     "inputs": {

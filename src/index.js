@@ -52,10 +52,22 @@ var OUTPUT_INDEX_MAP = {
 };
 
 function I2cPwmInterface(device, index, options, callback) {
+    var that = this;
+
     this._device = device;
     this._index = index;
 
-    this.setDuty(options.duty || 0, callback);
+    series([
+        this.setFrequency.bind(this, options.frequency || 200),
+        this.setDuty.bind(this, options.duty || 0)
+    ], function (error) {
+        if (error) {
+            callback(error);
+            return;
+        }
+
+        callback(undefined, that);
+    });
 }
 
 /**
@@ -64,6 +76,14 @@ function I2cPwmInterface(device, index, options, callback) {
  */
 I2cPwmInterface.prototype.setDuty = function (duty, callback) {
     this._device.setDuty(this._index, duty, callback);
+};
+
+/**
+ * @param {number} frequency
+ * @param {Function} [callback]
+ */
+I2cPwmInterface.prototype.setFrequency = function (frequency, callback) {
+    this._device.setFrequency(frequency, false, callback);
 };
 
 I2cPwmInterface.get = function (device, index, options, callback) {
@@ -75,11 +95,16 @@ module.exports = driver({
         this._i2c = inputs['i2c'];
         this._interfaces = [];
 
-        this.reset();
-        this.setFrequency(context.args.frequency || 200, next);
+        var frequency = context.args.frequency;
+
+        if (typeof frequency === 'number') {
+            this.setFrequency(context.args.frequency, next);
+        } else {
+            next();
+        }
     },
     detach: function () {
-        this.reset();
+        this.allOff();
     },
     getInterface: function (name, options, callback) {
         if (!hasOwnProperty.call(OUTPUT_INDEX_MAP, name)) {
@@ -109,15 +134,31 @@ module.exports = driver({
     exports: {
         /**
          * @param {number} frequency
+         * @param {boolean} overwrite
          * @param {Function} [callback]
          */
-        setFrequency: function (frequency, callback) {
-            var i2c = this._i2c;
+        setFrequency: function (frequency, overwrite, callback) {
+            if (typeof overwrite === 'function') {
+                callback = overwrite;
+                overwrite = undefined;
+            }
+
+            if (typeof this._frequency === 'number' && overwrite === false) {
+                if (this._frequency === frequency) {
+                    // TODO: queue and ensure this callback is called after setting completes.
+                    invokeCallback(callback);
+                    return;
+                }
+
+                throw new Error('The frequency of `pca9685` has already been set to a different value');
+            }
 
             this._frequency = frequency;
 
             // eslint-disable-next-line new-cap
             var preScale = GET_PRESCALE_VALUE(frequency);
+
+            var i2c = this._i2c;
 
             // The PRE_SCALE register can only be set when the SLEEP bit of MODE1 register is set to logic 1.
             i2c.writeByte(MODE_REGISTER_1, MODE_1_DEFAULT);
@@ -142,8 +183,7 @@ module.exports = driver({
         /**
          * @param {Function} [callback]
          */
-        reset: function (callback) {
-            this._i2c.writeByte(MODE_REGISTER_1, 0x80);
+        allOff: function (callback) {
             this._i2c.writeByte(ALL_LED_OFF_H, 0x10, callback);
         }
     }
@@ -168,5 +208,24 @@ function invokeCallback(callback, error, value, sync) {
         callback(error, value);
     } else {
         setImmediate(callback, error, value);
+    }
+}
+
+function series(tasks, callback) {
+    next();
+
+    function next(error) {
+        if (error) {
+            callback(error);
+            return;
+        }
+
+        var task = tasks.shift();
+
+        if (task) {
+            task(next);
+        } else {
+            callback();
+        }
     }
 }
