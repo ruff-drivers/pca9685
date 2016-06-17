@@ -51,14 +51,31 @@ var OUTPUT_INDEX_MAP = {
     'pwm-7': 7
 };
 
+var Overwrite = {
+    ignore: 0,
+    force: 1,
+    never: 2
+};
+
 function I2cPwmInterface(device, index, options, callback) {
     var that = this;
 
     this._device = device;
     this._index = index;
 
+    var frequency;
+    var overwrite;
+
+    if (typeof options.frequency === 'number') {
+        frequency = options.frequency;
+        overwrite = Overwrite.never;
+    } else {
+        frequency = 200;
+        overwrite = Overwrite.ignore;
+    }
+
     series([
-        this.setFrequency.bind(this, options.frequency || 200),
+        device.setFrequency.bind(device, frequency, overwrite),
         this.setDuty.bind(this, options.duty || 0)
     ], function (error) {
         if (error) {
@@ -83,7 +100,7 @@ I2cPwmInterface.prototype.setDuty = function (duty, callback) {
  * @param {Function} [callback]
  */
 I2cPwmInterface.prototype.setFrequency = function (frequency, callback) {
-    this._device.setFrequency(frequency, false, callback);
+    this._device.setFrequency(frequency, Overwrite.never, callback);
 };
 
 I2cPwmInterface.get = function (device, index, options, callback) {
@@ -92,13 +109,15 @@ I2cPwmInterface.get = function (device, index, options, callback) {
 
 module.exports = driver({
     attach: function (inputs, context, next) {
+        this.id = context.id;
+
         this._i2c = inputs['i2c'];
         this._interfaceMap = Object.create(null);
 
         var frequency = context.args.frequency;
 
         if (typeof frequency === 'number') {
-            this.setFrequency(context.args.frequency, next);
+            this.setFrequency(frequency, next);
         } else {
             next();
         }
@@ -135,23 +154,27 @@ module.exports = driver({
     exports: {
         /**
          * @param {number} frequency
-         * @param {boolean} overwrite
+         * @param {boolean} [overwrite=Overwrite.force]
          * @param {Function} [callback]
          */
         setFrequency: function (frequency, overwrite, callback) {
             if (typeof overwrite === 'function') {
                 callback = overwrite;
-                overwrite = undefined;
+                overwrite = Overwrite.force;
+            } else if (overwrite === undefined) {
+                overwrite = Overwrite.force;
             }
 
-            if (typeof this._frequency === 'number' && overwrite === false) {
-                if (this._frequency === frequency) {
+            if (typeof this._frequency === 'number') {
+                if (this._frequency === frequency || overwrite === Overwrite.ignore) {
                     // TODO: queue and ensure this callback is called after setting completes.
                     invokeCallback(callback);
                     return;
                 }
 
-                throw new Error('The frequency of `pca9685` has already been set to a different value');
+                if (overwrite === Overwrite.never) {
+                    throw new Error('The frequency of device "' + this.id + '" has already been set to a different value');
+                }
             }
 
             this._frequency = frequency;
