@@ -5,7 +5,9 @@
 
 'use strict';
 
+var async = require('ruff-async');
 var driver = require('ruff-driver');
+var util = require('util');
 
 var hasOwnProperty = Object.prototype.hasOwnProperty;
 
@@ -74,7 +76,7 @@ function I2cPwmInterface(device, index, options, callback) {
         overwrite = Overwrite.ignore;
     }
 
-    series([
+    async.series([
         device.setFrequency.bind(device, frequency, overwrite),
         this.setDuty.bind(this, options.duty || 0)
     ], function (error) {
@@ -126,12 +128,12 @@ module.exports = driver({
         this.allOff();
     },
     getInterface: function (name, options, callback) {
-        assertCallback(callback);
+        util.assertCallback(callback);
 
         var interfaceMap = this._interfaceMap;
 
         if (name in interfaceMap) {
-            invokeCallback(callback, undefined, interfaceMap[name]);
+            util.invokeCallbackAsync(callback, undefined, interfaceMap[name]);
             return;
         }
 
@@ -168,7 +170,7 @@ module.exports = driver({
             if (typeof this._frequency === 'number') {
                 if (this._frequency === frequency || overwrite === Overwrite.ignore) {
                     // TODO: queue and ensure this callback is called after setting completes.
-                    invokeCallback(callback);
+                    util.invokeCallbackAsync(callback);
                     return;
                 }
 
@@ -212,44 +214,3 @@ module.exports = driver({
         }
     }
 });
-
-function assertCallback(callback) {
-    if (typeof callback !== 'function') {
-        throw new TypeError('The `callback` is expected to be a function');
-    }
-}
-
-function invokeCallback(callback, error, value, sync) {
-    if (typeof callback !== 'function') {
-        if (error) {
-            throw error;
-        } else {
-            return;
-        }
-    }
-
-    if (sync) {
-        callback(error, value);
-    } else {
-        setImmediate(callback, error, value);
-    }
-}
-
-function series(tasks, callback) {
-    next();
-
-    function next(error) {
-        if (error) {
-            callback(error);
-            return;
-        }
-
-        var task = tasks.shift();
-
-        if (task) {
-            task(next);
-        } else {
-            callback();
-        }
-    }
-}
