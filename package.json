@@ -17,6 +17,9 @@
         "driver"
     ],
     "main": "src/index.js",
+    "engines": {
+        "ruff": ">=1.2.0 <1.4.0"
+    },
     "device-typings": "typings/device.d.ts",
     "scripts": {
         "install-sdk": "rvm install --local",
