@@ -8,6 +8,7 @@
 var async = require('ruff-async');
 var driver = require('ruff-driver');
 var util = require('util');
+var assert = require('assert');
 
 var hasOwnProperty = Object.prototype.hasOwnProperty;
 
@@ -37,6 +38,11 @@ var OFF_HIGH_OFFSET = 3;
 
 var ALL_LED_OFF_H = 0xfd;
 var PRE_SCALE = 0xfe;
+
+var DUTY_MIN = 0;
+var DUTY_MAX = 1;
+var FREQUENCY_MIN = 24;
+var FREQUENCY_MAX = 1526;
 
 function GET_PRESCALE_VALUE(frequency) {
     return Math.round(OSCILLATOR_CLOCK / (COUNTER_END * frequency)) - 1;
@@ -98,11 +104,25 @@ I2cPwmInterface.prototype.setDuty = function (duty, callback) {
 };
 
 /**
+ * @param {Function} [callback]
+ */
+I2cPwmInterface.prototype.getDuty = function (callback) {
+    this._device.getDuty(this._index, callback);
+};
+
+/**
  * @param {number} frequency
  * @param {Function} [callback]
  */
 I2cPwmInterface.prototype.setFrequency = function (frequency, callback) {
     this._device.setFrequency(frequency, Overwrite.never, callback);
+};
+
+/**
+ * @param {Function} [callback]
+ */
+I2cPwmInterface.prototype.getFrequency = function (callback) {
+    this._device.getFrequency(this._index, callback);
 };
 
 I2cPwmInterface.get = function (device, index, options, callback) {
@@ -179,6 +199,8 @@ module.exports = driver({
                 }
             }
 
+            assert(frequency >= FREQUENCY_MIN && frequency <= FREQUENCY_MAX,
+                   'Frequency should be [' + FREQUENCY_MIN + ', ' + FREQUENCY_MAX + ']');
             this._frequency = frequency;
 
             // eslint-disable-next-line new-cap
@@ -191,12 +213,26 @@ module.exports = driver({
             i2c.writeByte(PRE_SCALE, preScale);
             i2c.writeByte(MODE_REGISTER_1, MODE_1_DEFAULT & ~Mode1.sleep, callback);
         },
+
+        /**
+         * @param {number} index
+         * @param {Function} [callback]
+         */
+        getFrequency: function (index, callback) {
+            util.assertCallback(callback);
+            util.invokeCallbackAsync(callback, undefined, this._frequency);
+        },
+
         /**
          * @param {number} index
          * @param {number} duty 0 ~ 1
          * @param {Function} [callback]
          */
         setDuty: function (index, duty, callback) {
+            assert(duty >= DUTY_MIN && duty <= DUTY_MAX,
+                   'duty should be [' + DUTY_MIN + ', ' + DUTY_MAX + ']');
+            this._duty = duty;
+
             var i2c = this._i2c;
 
             var count = Math.round(duty * (COUNTER_END - 1));
@@ -206,6 +242,16 @@ module.exports = driver({
             i2c.writeByte(OUTPUT_0 + OFF_LOW_OFFSET + 4 * index, count & 0xff);
             i2c.writeByte(OUTPUT_0 + OFF_HIGH_OFFSET + 4 * index, count >> 8, callback);
         },
+
+        /**
+         * @param {number} index
+         * @param {Function} [callback]
+         */
+        getDuty: function (index, callback) {
+            util.assertCallback(callback);
+            util.invokeCallbackAsync(callback, undefined, this._duty);
+        },
+
         /**
          * @param {Function} [callback]
          */
