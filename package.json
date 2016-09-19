@@ -1,6 +1,6 @@
 {
     "name": "pca9685",
-    "version": "2.0.2",
+    "version": "2.0.3",
     "description": "PCA9685 (I2C-PWM) Driver for Ruff.",
     "author": "Nanchao Inc.",
     "license": "MIT",
@@ -18,7 +18,7 @@
     ],
     "main": "src/index.js",
     "engines": {
-        "ruff": ">=1.2.0 <1.5.0"
+        "ruff": ">=1.2.0 <1.6.0"
     },
     "device-typings": "typings/device.d.ts",
     "scripts": {
